@@ -30,8 +30,20 @@ with open('config.yml', 'r') as f:
 torch.manual_seed(seed)
 
 # wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
-with open('data/input.txt', 'r', encoding='utf-8') as f:
-  text = f.read()
+# with open('data/input.txt', 'r', encoding='utf-8') as f:
+#   text = f.read()
+
+import datasets
+
+# # load tiny shakespeare dataset
+# # dataset = datasets.load_dataset('tiny_shakespeare', cache_dir="cache")
+
+dataset = datasets.load_dataset('siavava/ai-tech-articles', split='train')
+df = dataset.to_pandas()
+df = df[df["year"] == 2023]
+
+# concat all "text" column values into one string
+text = " ".join(df["text"].tolist())
 
 # here are all the unique characters that occur in this text
 chars = sorted(list(set(text)))

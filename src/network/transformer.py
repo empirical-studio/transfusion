@@ -1,32 +1,65 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from typing import Self
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+import datasets
 
-from data import get_batch, encode, decode, vocab_size
+# from data import get_batch, encode, decode, vocab_size
 
 import yaml
-with open('config.yml', 'r') as f:
-  config = yaml.safe_load(f)
-  for k, v in config.items():
-    globals()[k] = v
+with open('config.yml', 'r') as f: globals().update(yaml.safe_load(f))
 
-# # hyperparameters
-# batch_size        = config.get("batch_size") # how many independent sequences will we process in parallel?
-# block_size        = config.get("block_size") # what is the maximum context length for predictions?
-# max_iters         = config.get("max_iters")
-# eval_interval     = config.get("eval_interval")
-# learning_rate     = config.get("learning_rate")
-# eval_iters        = config.get("eval_iters")
-# embeddings_size   = config.get("embeddings_size")
-# head_count        = config.get("head_count")
-# n_layer           = config.get("n_layer")
-# dropout           = config.get("dropout")
-# seed              = config.get("seed")
-# # # ------------
+
+dataset = datasets.load_dataset('siavava/ai-tech-articles', split='train')
+df = dataset.to_pandas()
+df = df[df["year"] == 2023]
+
+# concat all "text" column values into one string
+text = " ".join(df["text"].tolist())
+chars = sorted(list(set(text)))
+vocab_size = len(chars)
+stoi = { ch:i for i,ch in enumerate(chars) }
+itos = { i:ch for i,ch in enumerate(chars) }
+_encode = lambda s: [stoi.get(c, 0) for c in s]
+_decode = lambda l: ''.join([itos.get(i, " ") for i in l])
+
+class TextProcessor:
+  # with open('data/input.txt', 'r', encoding='utf-8') as f:
+  vocab_size = vocab_size
+  stoi = stoi
+  itos = itos
+  block_size = block_size
+  
+  @classmethod
+  def encode(cls, s) -> list[int]: return _encode(s)
+  
+  @classmethod
+  def decode(cls, l): _decode(l)
+  
+  
+  data = torch.tensor(_encode(text), dtype=torch.long)
+  n = int(0.9*len(data)) # first 90% will be train, rest val
+  train_data = data[:n]
+  val_data = data[n:]
+
+  @classmethod
+  def get_batch(cls, split):
+    """
+      Generate a small batch of data of inputs (`x`) and targets (`y`).
+
+      Note; while explicit access to the data is not provided,
+      the data is closed over in the function scope.
+    """
+    data = cls.train_data if split == 'train' else cls.val_data
+    ix = torch.randint(len(data) - block_size, (batch_size,))
+    x = torch.stack([data[i:i+block_size] for i in ix])
+    y = torch.stack([data[i+1:i+block_size+1] for i in ix])
+    x, y = x.to(device), y.to(device)
+    return x, y
 
 torch.manual_seed(seed)
 
@@ -37,7 +70,7 @@ def estimate_loss(model: nn.Module):
   for split in ['train', 'val']:
     losses = torch.zeros(eval_iters)
     for k in range(eval_iters):
-      X, Y = get_batch(split)
+      X, Y = TextProcessor.get_batch(split)
       logits, loss = model(X, Y)
       losses[k] = loss.item()
     out[split] = losses.mean()
@@ -147,11 +180,11 @@ class GPTLanguageModel(nn.Module):
   def __init__(self):
       super().__init__()
       # each token directly reads off the logits for the next token from a lookup table
-      self.token_embedding_table = nn.Embedding(vocab_size, embeddings_size)
+      self.token_embedding_table = nn.Embedding(TextProcessor.vocab_size, embeddings_size)
       self.position_embedding_table = nn.Embedding(block_size, embeddings_size)
       self.blocks = nn.Sequential(*[Block(embeddings_size, head_count=head_count) for _ in range(n_layer)])
       self.ln_f = nn.LayerNorm(embeddings_size) # final layer norm
-      self.lm_head = nn.Linear(embeddings_size, vocab_size)
+      self.lm_head = nn.Linear(embeddings_size, TextProcessor.vocab_size)
 
       # better init, not covered in the original GPT video, but important, will cover in followup video
       self.apply(self._init_weights)
@@ -233,7 +266,7 @@ class GPTLanguageModel(nn.Module):
         torch.save(self.state_dict(), f'models/{save_name}-{iter}.pth')
 
       # sample a batch of data
-      xb, yb = get_batch('train')
+      xb, yb = TextProcessor.get_batch('train')
 
       # evaluate the loss
       logits, loss = self(xb, yb)
@@ -266,7 +299,6 @@ def load_model(path=None):
 __all__ = [
     "estimate_loss"
   , "GPTLanguageModel"
-  , "encode"
-  , "decode"
+  , "TextProcessor"
   , "load_model"
 ]
