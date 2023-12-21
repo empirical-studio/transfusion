@@ -38,7 +38,17 @@ class TextProcessor:
   def encode(cls, s) -> list[int]: return _encode(s)
   
   @classmethod
-  def decode(cls, l): return _decode(l)
+  def decode(cls, l):
+    res = _decode(l)
+    
+    # insert line breaks in any line longer than 80 characters
+    # but avoid breaking up words
+    res = res.split()
+    res = [res[i:i+10] for i in range(0, len(res), 10)]
+    res = [" ".join(line) for line in res]
+    res = "\n".join(res)
+    return res
+      
   
   
   data = torch.tensor(_encode(text), dtype=torch.long)
