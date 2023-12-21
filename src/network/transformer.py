@@ -38,7 +38,7 @@ class TextProcessor:
   def encode(cls, s) -> list[int]: return _encode(s)
   
   @classmethod
-  def decode(cls, l): _decode(l)
+  def decode(cls, l): return _decode(l)
   
   
   data = torch.tensor(_encode(text), dtype=torch.long)
@@ -275,7 +275,7 @@ class GPTLanguageModel(nn.Module):
       optimizer.step()
 
     # save model
-    torch.save(self.state_dict(), f'models/{save_name}.pth')
+    torch.save(self.state_dict(), f'models/{save_name}-2.pth')
 
 def load_model(path=None):
   """
